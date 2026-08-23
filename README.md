@@ -1,26 +1,31 @@
+<div align="center">
+
+<img src=".github/nova-logo.png" alt="NOVA logo" width="160" />
+
 # NOVA Frontend
 
-> The web UI for NOVA — and its only interface.
+The web UI of **Neural Orchestration & Virtual Agent** — and its only interface
 
-A React 19 + TypeScript + Vite app: the chat, the live multi-agent run diagram,
-memory and RAG panels, the scheduler, connected services, host metrics, and the
-documentation reader.
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Follow-0A66C2?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/thisisrobyn)
+[![GitHub](https://img.shields.io/badge/GitHub-Follow-181717?style=for-the-badge&logo=github)](https://github.com/thisisrobyn)
+[![Stars](https://img.shields.io/github/stars/nova-ai-sys/nova-frontend?style=for-the-badge&color=f59e0b)](https://github.com/nova-ai-sys/nova-frontend/stargazers)
 
-It runs **on your own machine**, against the API in
+</div>
+
+## What this is
+
+A React app: the chat, the live multi-agent run diagram, memory and knowledge
+base, the scheduler, connected accounts, host metrics and the documentation
+reader.
+
+It runs **on your own machine** and talks to
 [nova-api](https://github.com/nova-ai-sys/nova-api) on `localhost:8000`. It is
-never deployed and there is no login — NOVA is single-user by design.
+never deployed, and there is no login.
 
-| Repository | What it is |
-|------------|------------|
-| **nova-frontend** (this one) | The web UI |
-| [nova-api](https://github.com/nova-ai-sys/nova-api) | The agent and the REST API |
-| [nova-docs](https://github.com/nova-ai-sys/nova-docs) | The documentation |
-| [nova-landing](https://github.com/nova-ai-sys/nova-landing) | The public site, nova.robyn.es |
-
-## Quick start
+## Install
 
 Start [nova-api](https://github.com/nova-ai-sys/nova-api) first — the UI has
-nothing to talk to otherwise. Then:
+nothing to talk to otherwise.
 
 ```bash
 npm install
@@ -29,9 +34,9 @@ npm run dev
 
 Open **http://localhost:5173**.
 
-In development the Vite server proxies `/api` to `http://localhost:8000`, so
-the browser sees a single origin and CORS never enters the picture. To point at
-an API somewhere else, set `VITE_API_URL` — see `.env.example`.
+In development, Vite proxies `/api` to `http://localhost:8000`, so the browser
+sees one origin and CORS never comes up. To point at an API somewhere else, set
+`VITE_API_URL` — see `.env.example`.
 
 ## Commands
 
@@ -44,38 +49,44 @@ an API somewhere else, set `VITE_API_URL` — see `.env.example`.
 
 ## Layout
 
-```
-src/
-├── pages/ChatPage.tsx      # The app itself
-├── pages/DocsPage.tsx      # Documentation reader (shell only — see below)
-├── components/
-│   ├── chat/               # Messages, composer, live A2A run diagram, tokens
-│   ├── connections/        # Google / Microsoft / GitHub OAuth panel
-│   ├── intelligence/       # Memory and knowledge base
-│   ├── scheduler/          # Automations
-│   ├── system/             # Host CPU / RAM / GPU dock
-│   ├── docs/               # Markdown renderer for documentation pages
-│   └── layout/             # Sidebar, header, modals
-├── hooks/                  # useChat, useConnections, useDocs, useTheme, …
-└── lib/                    # API client, types, i18n, utilities
-```
+| Folder | What lives there |
+|--------|-----------------|
+| `src/pages/` | ChatPage — the app. DocsPage — the documentation reader |
+| `src/components/chat/` | Messages, composer, live A2A diagram, token counter |
+| `src/components/connections/` | Google, Microsoft and GitHub accounts |
+| `src/components/intelligence/` | Memory and knowledge base |
+| `src/components/scheduler/` | Automations |
+| `src/components/system/` | Host CPU, RAM and GPU dock |
+| `src/hooks/` | useChat, useConnections, useDocs, useTheme |
+| `src/lib/` | API client, types, i18n, utilities |
 
 ## Documentation
 
-`src/pages/DocsPage.tsx` holds no documentation — it is a shell. The pages come
-from [nova-docs](https://github.com/nova-ai-sys/nova-docs) as a JSON bundle:
+`DocsPage` holds no documentation — it is a shell. The pages come from
+[nova-docs](https://github.com/nova-ai-sys/nova-docs) as a JSON bundle:
 
 - `public/docs-bundle.json` ships with the build and always works offline.
 - Set `VITE_DOCS_BUNDLE_URL` to the published bundle and the docs update
-  without updating NOVA, falling back to the local copy when the network is
-  gone.
+  without updating NOVA.
 
-To edit documentation, edit `nova-docs`. Nothing in this repository is the
-source of any page.
+To edit documentation, edit `nova-docs`. Nothing here is the source of any page.
 
-## Talking to the API
+## The rest of NOVA
 
-Every call goes through `src/lib/api.ts`, which prefixes `VITE_API_URL`. There
-are no auth headers: the API has no authentication, because it listens on your
-own machine. If you put this UI in front of an API reachable by anyone else,
-that is a decision you have to secure yourself.
+| Repository | What it is |
+|------------|------------|
+| [nova-api](https://github.com/nova-ai-sys/nova-api) | The agent and the REST API |
+| [nova-docs](https://github.com/nova-ai-sys/nova-docs) | The documentation |
+| [nova-landing](https://github.com/nova-ai-sys/nova-landing) | The public site |
+
+Full documentation at **[nova.robyn.es/docs](https://nova.robyn.es/docs)**.
+
+## License
+
+MIT
+
+---
+
+<div align="center">
+  Made with ❤️ by <a href="https://robyn.es">ROBYN</a>
+</div>

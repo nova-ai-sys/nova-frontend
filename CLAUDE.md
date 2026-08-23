@@ -68,8 +68,12 @@ exactly what the split removed.
 
 ## Working agreements
 
-- Commits follow **Conventional Commits** (release-please is configured); do
-  not bump versions or edit `CHANGELOG.md` by hand.
-- Only commit or push when asked.
+- Commits follow **Conventional Commits**; release-please handles versions and
+  `CHANGELOG.md`, so never edit either by hand.
+- **Write short commit messages.** One line saying what changed. Add a body
+  only when the reason is not obvious, and keep it to a sentence or two.
+- **No `Co-Authored-By` trailers** and no tool attribution in commit messages.
+- **Never push unless asked.** Committing finished work is fine; pushing is a
+  separate decision that belongs to the user.
 - A change to the REST contract needs the matching change in `nova-api` and a
   docs update in `nova-docs`.
