@@ -9,20 +9,18 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 
 initScrollbars();
 
-// Auto-detect basename when served under /projects/nova-agent on the portfolio
-const path = window.location.pathname;
-const PREFIX = '/projects/nova-agent';
-const basename = path.startsWith(PREFIX) ? PREFIX : '/';
-
 const rootCrashFallback = (
   <div className="flex h-screen flex-col items-center justify-center gap-4 bg-surface-950 px-6 text-center">
     <h1 className="text-lg font-semibold text-surface-200">Something went wrong</h1>
     <p className="max-w-sm text-sm text-surface-500">
       NOVA hit an unexpected error. Reloading usually fixes it — your chats are saved on the server.
     </p>
+    {/* A full-width thumb target on a phone: this is the only control on a
+        crashed screen, and a pointer-sized button is a poor thing to hunt for
+        when the app has just fallen over. */}
     <button
       onClick={() => window.location.reload()}
-      className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-surface-950 hover:bg-primary-500"
+      className="w-full max-w-xs rounded-2xl bg-primary-600 px-6 py-4 text-base font-semibold text-surface-950 hover:bg-primary-500 md:w-auto md:rounded-lg md:px-4 md:py-2 md:text-sm md:font-medium"
     >
       Reload
     </button>
@@ -32,7 +30,7 @@ const rootCrashFallback = (
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary label="root" fallback={rootCrashFallback}>
-      <BrowserRouter basename={basename}>
+      <BrowserRouter>
         <LanguageProvider>
           <App />
         </LanguageProvider>

@@ -5,8 +5,6 @@ import {
   MessageSquare,
   Plus,
   Terminal,
-  User,
-  LogOut,
   Settings,
   MoreHorizontal,
   Pencil,
@@ -30,6 +28,7 @@ import { getFolderIcon } from '@/components/layout/FolderModal';
 import { useI18n } from '@/lib/i18n';
 import { useConnections } from '@/hooks/useConnections';
 import { useRunningSessions } from '@/hooks/useRunningSessions';
+import { useIsMobile, isMobileViewport, canHover } from '@/hooks/useIsMobile';
 import type { ConnectionProvider } from '@/lib/types';
 
 /* ── Data model ────────────────────────────────────────────── */
@@ -46,12 +45,6 @@ export interface ChatFolder {
   id: string;
   name: string;
   icon: string;
-}
-
-export interface UserProfile {
-  name: string;
-  email: string;
-  picture?: string;
 }
 
 /* ── Drag & drop helpers ───────────────────────────────────── */
@@ -77,7 +70,6 @@ interface SidebarProps {
   chatHistory: ChatHistoryEntry[];
   folders: ChatFolder[];
   activeSessionId: string;
-  user?: UserProfile | null;
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
   onDeleteChat: (id: string) => void;
@@ -86,8 +78,6 @@ interface SidebarProps {
   onCreateFolder: () => void;
   onEditFolder: (folder: ChatFolder) => void;
   onDeleteFolder: (id: string) => void;
-  onLogout?: () => void;
-  onOpenSettings?: () => void;
   onOpenIntelligence?: () => void;
   onOpenScheduler?: () => void;
   onOpenConnections?: () => void;
@@ -443,15 +433,9 @@ const SERVICE_MARKS: [ConnectionProvider, (p: { className?: string; mono?: boole
   ['github', GitHubIcon],
 ];
 
-/**
- * Green when the service is connected, grey when it is not.
- *
- * `identity` is the signed-in user: passing it makes the shared store refetch
- * once the session finishes restoring after a reload, so the marks are not
- * stuck grey until the connections panel is opened by hand.
- */
-function ConnectionMarks({ identity }: { identity?: string | null }) {
-  const { connections } = useConnections(identity);
+/** Green when the service is connected, grey when it is not. */
+function ConnectionMarks() {
+  const { connections } = useConnections();
 
   return (
     <span className="ml-auto flex items-center gap-1">
@@ -484,6 +468,10 @@ const SLIDE = { duration: 0.3, ease: [0.4, 0, 0.2, 1] } as const;
 const FADE = { duration: 0.14, ease: 'easeOut' } as const;
 
 function readCollapsed(): boolean {
+  // On a phone the sidebar always starts as the rail: the panel covers most of
+  // the screen there, so a remembered "expanded" from the desktop would open
+  // the app on top of the conversation instead of on the conversation.
+  if (isMobileViewport()) return true;
   try {
     return localStorage.getItem(COLLAPSE_STORAGE_KEY) === '1';
   } catch {
@@ -528,6 +516,10 @@ function RailButton({ icon, label, onClick, tone = 'accent', active, children, f
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
 
   const show = () => {
+    // Touch has no hover: a tap would open this label and leave it hanging over
+    // the chat with nothing to dismiss it, so the flyout is pointer-only. The
+    // button keeps its `aria-label`, which is what the label was saying anyway.
+    if (!canHover()) return;
     const box = wrapRef.current?.getBoundingClientRect();
     if (!box) return;
     setAnchor({ top: box.top + box.height / 2, right: window.innerWidth - box.left });
@@ -608,13 +600,9 @@ interface CollapsedRailProps {
   folders: ChatFolder[];
   activeSessionId: string;
   runningSessions: Set<string>;
-  user?: UserProfile | null;
-  identity?: string | null;
   onExpand: () => void;
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
-  onLogout?: () => void;
-  onOpenSettings?: () => void;
   onOpenIntelligence?: () => void;
   onOpenScheduler?: () => void;
   onOpenConnections?: () => void;
@@ -626,13 +614,9 @@ function CollapsedRail({
   folders,
   activeSessionId,
   runningSessions,
-  user,
-  identity,
   onExpand,
   onSelectSession,
   onNewChat,
-  onLogout,
-  onOpenSettings,
   onOpenIntelligence,
   onOpenScheduler,
   onOpenConnections,
@@ -640,7 +624,7 @@ function CollapsedRail({
 }: CollapsedRailProps) {
   const navigate = useNavigate();
   const { t } = useI18n();
-  const { connections } = useConnections(identity);
+  const { connections } = useConnections();
   const anyConnected = connections.some((c) => c.connected);
   // Folders keep their own mark, with their chats listed in its flyout; only
   // loose chats get one mark each.
@@ -648,8 +632,11 @@ function CollapsedRail({
 
   return (
     <div className="flex h-full w-14 shrink-0 flex-col">
-      {/* Header — the mark alone, no wordmark and no version */}
-      <div className="flex flex-col items-center gap-1 border-b border-primary-900/30 py-3">
+      {/* Header — the mark alone, no wordmark and no version.
+          The safe-area insets live on the header and the footer rather than on
+          this column, so the rail's own surface still runs edge to edge and it
+          is only the icons that step clear of the island and the home bar. */}
+      <div className="flex flex-col items-center gap-1 border-b border-primary-900/30 py-3 max-md:pt-[calc(0.75rem+env(safe-area-inset-top))]">
         <button
           onClick={() => navigate('/')}
           title="NOVA"
@@ -674,29 +661,25 @@ function CollapsedRail({
           label={t('sidebar.intelligence')}
           onClick={onOpenIntelligence}
         />
-        {!import.meta.env.PROD && (
-          <RailButton
-            icon={<Clock className="h-4 w-4" />}
-            label={t('sidebar.scheduler')}
-            onClick={onOpenScheduler}
-          />
-        )}
-        {!import.meta.env.PROD && (
-          <RailButton
-            icon={
-              <span className="relative">
-                <Plug className="h-4 w-4" />
-                {anyConnected && (
-                  <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.8)]" />
-                )}
-              </span>
-            }
-            label={t('sidebar.connections')}
-            onClick={onOpenConnections}
-          >
-            <ConnectionMarks identity={identity} />
-          </RailButton>
-        )}
+        <RailButton
+          icon={<Clock className="h-4 w-4" />}
+          label={t('sidebar.scheduler')}
+          onClick={onOpenScheduler}
+        />
+        <RailButton
+          icon={
+            <span className="relative">
+              <Plug className="h-4 w-4" />
+              {anyConnected && (
+                <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.8)]" />
+              )}
+            </span>
+          }
+          label={t('sidebar.connections')}
+          onClick={onOpenConnections}
+        >
+          <ConnectionMarks />
+        </RailButton>
       </div>
 
       {/* Folders and chats — hover a mark for the title and a way back in */}
@@ -768,7 +751,7 @@ function CollapsedRail({
       </div>
 
       {/* Footer — expand, then the same second half the open sidebar shows */}
-      <div className="flex flex-col items-center gap-1 border-t border-primary-900/30 py-2">
+      <div className="flex flex-col items-center gap-1 border-t border-primary-900/30 py-2 max-md:pb-8">
         <RailButton
           icon={<PanelRightOpen className="h-4 w-4" />}
           label={t('sidebar.expand')}
@@ -780,41 +763,12 @@ function CollapsedRail({
           label={t('sidebar.docs')}
           onClick={() => navigate('/docs')}
         />
-        {!import.meta.env.PROD && (
-          <RailButton
-            icon={<Settings className="h-4 w-4" />}
-            label={t('sidebar.settings')}
-            onClick={onOpenAppSettings}
-            tone="muted"
-          />
-        )}
-        {user && (
-          <>
-            <RailButton
-              icon={
-                user.picture ? (
-                  <img
-                    src={user.picture}
-                    alt={user.name}
-                    className="h-7 w-7 rounded-full ring-1 ring-primary-800/50"
-                  />
-                ) : (
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-950/50 ring-1 ring-primary-800/50">
-                    <User className="h-3.5 w-3.5 text-primary-500" />
-                  </span>
-                )
-              }
-              label={user.name}
-              onClick={onOpenSettings}
-            />
-            <RailButton
-              icon={<LogOut className="h-4 w-4" />}
-              label={t('sidebar.signOut')}
-              onClick={onLogout}
-              tone="muted"
-            />
-          </>
-        )}
+        <RailButton
+          icon={<Settings className="h-4 w-4" />}
+          label={t('sidebar.settings')}
+          onClick={onOpenAppSettings}
+          tone="muted"
+        />
       </div>
     </div>
   );
@@ -826,7 +780,6 @@ export function Sidebar({
   chatHistory,
   folders,
   activeSessionId,
-  user,
   onSelectSession,
   onNewChat,
   onDeleteChat,
@@ -835,8 +788,6 @@ export function Sidebar({
   onCreateFolder,
   onEditFolder,
   onDeleteFolder,
-  onLogout,
-  onOpenSettings,
   onOpenIntelligence,
   onOpenScheduler,
   onOpenConnections,
@@ -848,16 +799,17 @@ export function Sidebar({
   const runningSessions = useMemo(() => new Set(running), [running]);
   const uncategorized = chatHistory.filter((e) => !e.folderId);
   const [collapsed, setCollapsed] = useState(readCollapsed);
-  // The connection marks belong to whoever is signed in, so the shared store
-  // knows to refetch when the session finishes restoring.
-  const identity = user?.email ?? null;
-
+  const isMobile = useIsMobile();
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
-      try {
-        localStorage.setItem(COLLAPSE_STORAGE_KEY, next ? '1' : '0');
-      } catch { /* private mode — the choice just won't persist */ }
+      // The phone's expanded panel is a transient overlay, not a preference:
+      // persisting it would reopen it over the chat on the next visit.
+      if (!isMobile) {
+        try {
+          localStorage.setItem(COLLAPSE_STORAGE_KEY, next ? '1' : '0');
+        } catch { /* private mode — the choice just won't persist */ }
+      }
       return next;
     });
   };
@@ -891,20 +843,50 @@ export function Sidebar({
   };
 
   return (
+    <>
+      {/* Phone: tapping outside the floating panel puts it away, the same as
+          tapping the collapse control inside it. */}
+      <AnimatePresence>
+        {isMobile && !collapsed && (
+          <motion.div
+            key="sidebar-scrim"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={FADE}
+            onClick={toggleCollapsed}
+            className="fixed inset-0 z-30 bg-black/60 backdrop-blur-[2px] md:hidden"
+          />
+        )}
+      </AnimatePresence>
+
     <motion.aside
       initial={false}
-      animate={{ width: collapsed ? RAIL_WIDTH : PANEL_WIDTH }}
+      // On a phone the aside keeps the rail's footprint whatever the state is:
+      // the expanded panel floats over the chat (see below) rather than
+      // squeezing it into the leftover strip.
+      animate={{ width: collapsed || isMobile ? RAIL_WIDTH : PANEL_WIDTH }}
       transition={SLIDE}
       // No clipping: the rail's hover flyouts have to reach past this edge.
       // The panel is fixed-width inside, so while it collapses it slides off
       // the right of the viewport instead of squashing its own layout.
-      className="relative flex h-full shrink-0 flex-col border-l border-primary-900/30 bg-surface-900/50"
+      className={`relative z-40 flex h-full shrink-0 flex-col border-l border-primary-900/30 ${
+        // Solid on a phone. Navigation should be somewhere to stand, not
+        // another translucent layer — and the drawer slides over this rail, so
+        // anything see-through leaves the collapsed icons showing through the
+        // panel that is meant to have replaced them.
+        isMobile ? 'bg-surface-900' : 'bg-surface-900/50'
+      }`}
     >
-      <AnimatePresence initial={false} mode="wait">
-        {collapsed ? (
+      {/* Desktop swaps rail ↔ panel one at a time (`wait`). On a phone the rail
+          never leaves — it stays put under the panel, which slides in over it
+          from the right edge, so opening reads as a drawer coming out of the
+          side rather than one view blinking into another. */}
+      <AnimatePresence initial={false} mode={isMobile ? 'sync' : 'wait'}>
+        {(collapsed || isMobile) && (
           <motion.div
             key="rail"
-            initial={{ opacity: 0 }}
+            initial={isMobile ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={FADE}
@@ -915,30 +897,43 @@ export function Sidebar({
               folders={folders}
               activeSessionId={activeSessionId}
               runningSessions={runningSessions}
-              user={user}
-              identity={identity}
               onExpand={toggleCollapsed}
               onSelectSession={onSelectSession}
               onNewChat={onNewChat}
-              onLogout={onLogout}
-              onOpenSettings={onOpenSettings}
               onOpenIntelligence={onOpenIntelligence}
               onOpenScheduler={onOpenScheduler}
               onOpenConnections={onOpenConnections}
               onOpenAppSettings={onOpenAppSettings}
             />
           </motion.div>
-        ) : (
+        )}
+        {(isMobile || !collapsed) && (
           <motion.div
             key="panel"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={FADE}
-            className="flex h-full w-64 shrink-0 flex-col"
+            // The phone drawer stays mounted and slides on a CSS transition
+            // rather than entering and exiting: staying mounted is what lets it
+            // travel back out to the right on close as well as in, and it keeps
+            // the chat list's scroll position between openings. Desktop keeps
+            // the cross-fade, where the aside's own width animation is already
+            // supplying the movement.
+            {...(isMobile
+              ? {}
+              : { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: FADE })}
+            aria-hidden={isMobile && collapsed}
+            // Phone: pulled out of the flow and anchored to the right edge, so
+            // it lies on top of the chat instead of resizing it. Fully opaque —
+            // it covers the rail it slid out of, and the collapsed icons
+            // showing through would make it look like two menus at once.
+            className={`flex h-full w-64 shrink-0 flex-col ${
+              isMobile
+                ? `absolute right-0 top-0 z-40 border-l border-primary-900/30 bg-surface-950 shadow-2xl shadow-black/70 transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                    collapsed ? 'pointer-events-none translate-x-full' : 'translate-x-0'
+                  }`
+                : ''
+            }`}
           >
           {/* Header */}
-          <div className="flex items-center gap-2 border-b border-primary-900/30 px-4 py-3">
+          <div className="flex items-center gap-2 border-b border-primary-900/30 px-4 py-3 max-md:pt-[calc(0.75rem+env(safe-area-inset-top))]">
             <button
               onClick={() => navigate('/')}
               className="flex flex-1 cursor-pointer items-center gap-2 transition-opacity hover:opacity-80"
@@ -966,24 +961,20 @@ export function Sidebar({
             <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenIntelligence}>
               <Brain className="h-3.5 w-3.5 text-primary-500" /> {t('sidebar.intelligence')}
             </Button>
-            {!import.meta.env.PROD && (
-              <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenScheduler}>
-                <Clock className="h-3.5 w-3.5 text-primary-500" /> {t('sidebar.scheduler')}
-              </Button>
-            )}
-            {!import.meta.env.PROD && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-1.5 text-surface-400"
-                onClick={onOpenConnections}
-                title={t('conn.title')}
-              >
-                <Plug className="h-3.5 w-3.5 text-primary-500" />
-                {t('sidebar.connections')}
-                <ConnectionMarks identity={identity} />
-              </Button>
-            )}
+            <Button variant="ghost" size="sm" className="w-full justify-start gap-1.5 text-surface-400" onClick={onOpenScheduler}>
+              <Clock className="h-3.5 w-3.5 text-primary-500" /> {t('sidebar.scheduler')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start gap-1.5 text-surface-400"
+              onClick={onOpenConnections}
+              title={t('conn.title')}
+            >
+              <Plug className="h-3.5 w-3.5 text-primary-500" />
+              {t('sidebar.connections')}
+              <ConnectionMarks />
+            </Button>
           </div>
 
           {/* Chat history with folders */}
@@ -1059,8 +1050,10 @@ export function Sidebar({
             </div>
           </div>
 
-          {/* Collapse toggle, then a divider and the utility icons */}
-          <div className="flex items-center gap-1 border-t border-primary-900/30 px-3 py-2">
+          {/* Collapse toggle, then a divider and the utility icons. Whichever
+              of these two rows ends the panel carries the home-bar inset — the
+              row itself still reaches the bottom edge, only its contents lift. */}
+          <div className="flex items-center gap-1 border-t border-primary-900/30 px-3 py-2 max-md:pb-8">
             <button
               onClick={toggleCollapsed}
               title={t('sidebar.collapse')}
@@ -1078,66 +1071,19 @@ export function Sidebar({
             >
               <BookOpen className="h-4 w-4" />
             </button>
-            {!import.meta.env.PROD && (
-              <button
-                onClick={onOpenAppSettings}
-                title={t('sidebar.settings')}
-                className="ml-auto cursor-pointer rounded-lg p-2 text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              onClick={onOpenAppSettings}
+              title={t('sidebar.settings')}
+              className="ml-auto cursor-pointer rounded-lg p-2 text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
           </div>
 
-          {/* User profile */}
-          {user && (
-            <div className="border-t border-primary-900/30 p-3">
-              <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
-                <button
-                  onClick={onOpenSettings}
-                  className="flex shrink-0 cursor-pointer items-center justify-center"
-                  title={t('sidebar.profile')}
-                >
-                  {user.picture ? (
-                    <img
-                      src={user.picture}
-                      alt={user.name}
-                      className="h-7 w-7 rounded-full ring-1 ring-primary-800/50 transition-all hover:ring-primary-500/50"
-                    />
-                  ) : (
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-950/50 ring-1 ring-primary-800/50 transition-all hover:ring-primary-500/50">
-                      <User className="h-3.5 w-3.5 text-primary-500" />
-                    </div>
-                  )}
-                </button>
-                <button
-                  onClick={onOpenSettings}
-                  className="min-w-0 flex-1 cursor-pointer text-left transition-colors hover:opacity-80"
-                  title={t('sidebar.profile')}
-                >
-                  <p className="truncate text-xs font-medium text-surface-200">{user.name}</p>
-                  <p className="truncate text-[10px] text-surface-500">{user.email}</p>
-                </button>
-                <button
-                  onClick={onOpenSettings}
-                  title={t('sidebar.settings')}
-                  className="shrink-0 cursor-pointer rounded-lg p-1.5 text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400"
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={onLogout}
-                  title={t('sidebar.signOut')}
-                  className="shrink-0 cursor-pointer rounded-lg p-1.5 text-surface-500 transition-colors hover:bg-surface-800 hover:text-red-400"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
           </motion.div>
         )}
       </AnimatePresence>
     </motion.aside>
+    </>
   );
 }

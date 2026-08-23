@@ -71,7 +71,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
 
       {/* Toast container – top center */}
-      <div className="pointer-events-none fixed inset-x-0 top-4 z-[100] flex flex-col items-center gap-2">
+      <div className="pointer-events-none fixed inset-x-0 top-4 z-[100] flex flex-col items-center gap-2 max-md:top-[calc(1rem+env(safe-area-inset-top))]">
         <AnimatePresence>
           {toasts.map((t) => {
             const Icon = variantIcon[t.variant];

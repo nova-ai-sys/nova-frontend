@@ -52,6 +52,7 @@ const TRANSLATIONS: Record<Lang, Dict> = {
     'chat.thinking3': 'Working on a reply…',
     'chat.thinking4': 'Almost there…',
     'chat.combining': 'Combining what the agents found…',
+    'chat.jumpToEnd': 'Jump to latest',
     // Intelligence
     'intel.title': 'Intelligence',
     'intel.memory': 'memory',
@@ -368,6 +369,7 @@ const TRANSLATIONS: Record<Lang, Dict> = {
     'chat.thinking3': 'Redactando una respuesta…',
     'chat.thinking4': 'Ya casi está…',
     'chat.combining': 'Combinando lo que han encontrado los agentes…',
+    'chat.jumpToEnd': 'Ir al final',
     'intel.title': 'Inteligencia',
     'intel.memory': 'memoria',
     'intel.knowledge': 'conocimiento',

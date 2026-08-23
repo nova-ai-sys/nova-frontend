@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -618,6 +618,9 @@ export function AgentFlow({ plan, taskStates }: AgentFlowProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const nodeRefs = useRef(new Map<string, HTMLButtonElement>());
   const drag = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
+  /** Two-finger gesture in progress: the span between the fingers when it
+   *  started, and the zoom it started from. */
+  const pinch = useRef<{ distance: number; zoom: number } | null>(null);
 
   const waves = useMemo(() => computeWaves(plan), [plan]);
   const waveOf = useMemo(() => {
@@ -702,6 +705,34 @@ export function AgentFlow({ plan, taskStates }: AgentFlowProps) {
     drag.current = null;
   };
 
+  /* Pinch to zoom. The page itself has zoom switched off (see index.html), so
+     the diagram is the one place a pinch still means something — and without
+     this the touch zoom would only be reachable through the +/- buttons. One
+     finger is left alone: that is the viewport's own scroll, which is how
+     panning already works on touch. */
+  const touchDistance = (touches: React.TouchList) => {
+    const [a, b] = [touches[0], touches[1]];
+    return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+  };
+
+  const onTouchStart = (e: ReactTouchEvent) => {
+    if (e.touches.length !== 2) return;
+    pinch.current = { distance: touchDistance(e.touches), zoom };
+  };
+
+  const onTouchMove = (e: ReactTouchEvent) => {
+    // No `preventDefault` here — React registers touchmove passively, and the
+    // `touch-pan-x touch-pan-y` on the viewport has already told the browser
+    // that a two-finger gesture is ours, leaving one-finger scroll to it.
+    if (!pinch.current || e.touches.length !== 2) return;
+    const ratio = touchDistance(e.touches) / pinch.current.distance;
+    setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +(pinch.current.zoom * ratio).toFixed(2))));
+  };
+
+  const onTouchEnd = (e: ReactTouchEvent) => {
+    if (e.touches.length < 2) pinch.current = null;
+  };
+
   const hoveredTask = hover ? plan.find((t) => t.id === hover.taskId) : undefined;
   const clickedTask = clickedTaskId ? plan.find((t) => t.id === clickedTaskId) ?? null : null;
 
@@ -761,11 +792,15 @@ export function AgentFlow({ plan, taskStates }: AgentFlowProps) {
       onMouseMove={onMouseMove}
       onMouseUp={endDrag}
       onMouseLeave={endDrag}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
       /* `scrollbar-none`: the canvas is panned by dragging or the wheel, so the
          bars are just noise on top of the diagram. `safe center` centres the
          diagram when it fits and falls back to start-alignment when it does
          not — plain centring would push the overflowing part out of reach. */
-      className={`flex cursor-grab overflow-auto active:cursor-grabbing scrollbar-none [align-items:safe_center] [justify-content:safe_center] ${
+      className={`flex cursor-grab touch-pan-x touch-pan-y overflow-auto active:cursor-grabbing scrollbar-none [align-items:safe_center] [justify-content:safe_center] ${
         expanded ? 'h-full' : 'h-[300px]'
       }`}
     >
@@ -834,7 +869,7 @@ export function AgentFlow({ plan, taskStates }: AgentFlowProps) {
 
   const body = (
     <div
-      className={`flex min-h-0 select-none flex-col overflow-hidden rounded-2xl border bg-surface-950/70 transition-colors ${
+      className={`flex min-h-0 select-none flex-col overflow-hidden rounded-2xl border bg-surface-950/90 transition-colors ${
         running
           ? 'border-primary-700/50 shadow-[0_0_30px_-14px_rgba(74,222,128,0.75)]'
           : failed > 0
@@ -859,13 +894,16 @@ export function AgentFlow({ plan, taskStates }: AgentFlowProps) {
         />
       </div>
 
-      {/* Side by side once expanded — the log is the point of the big view. */}
-      <div className={`flex min-h-0 flex-1 ${expanded ? 'flex-row' : 'flex-col'}`}>
+      {/* Side by side once expanded — the log is the point of the big view.
+          A phone has no width to give away, so there the two stack instead:
+          the diagram takes the top and the log sits under it, rather than a
+          288px column covering most of the diagram it is describing. */}
+      <div className={`flex min-h-0 flex-1 ${expanded ? 'flex-col md:flex-row' : 'flex-col'}`}>
         <div className="min-h-0 min-w-0 flex-1">{canvas}</div>
         <div
           className={
             expanded
-              ? 'flex w-72 shrink-0 flex-col border-l border-surface-800/60'
+              ? 'flex h-40 shrink-0 flex-col border-t border-surface-800/60 md:h-auto md:w-72 md:border-l md:border-t-0'
               : 'flex h-28 shrink-0 flex-col border-t border-surface-800/60'
           }
         >
@@ -881,7 +919,7 @@ export function AgentFlow({ plan, taskStates }: AgentFlowProps) {
         ? createPortal(
             <AnimatePresence>
               <motion.div
-                className="fixed inset-0 z-50 p-3 sm:p-5"
+                className="fixed inset-0 z-50 p-3 max-md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-md:pt-[calc(0.75rem+env(safe-area-inset-top))] sm:p-5"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}

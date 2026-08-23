@@ -3,24 +3,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Check, Copy } from 'lucide-react';
+import { extractText } from '@/lib/markdown';
 import 'highlight.js/styles/vs2015.min.css';
-
-/* ── Extract plain text from React children tree ──────────── */
-
-function extractText(node: ReactNode): string {
-  if (typeof node === 'string') return node;
-  if (typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(extractText).join('');
-  if (node && typeof node === 'object' && 'props' in node) {
-    const el = node as React.ReactElement<{ children?: ReactNode }>;
-    return extractText(el.props.children);
-  }
-  return '';
-}
 
 /* ── Copy button ──────────────────────────────────────────── */
 
-function CopyButton({ text }: { text: string }) {
+export function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
@@ -50,7 +38,7 @@ function CopyButton({ text }: { text: string }) {
 
 /* ── Inline code ──────────────────────────────────────────── */
 
-function InlineCode({ children }: { children?: ReactNode }) {
+export function InlineCode({ children }: { children?: ReactNode }) {
   return (
     <code className="rounded-md bg-primary-950/40 px-1.5 py-0.5 text-[0.85em] font-medium text-primary-400">
       {children}

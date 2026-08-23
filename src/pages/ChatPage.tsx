@@ -4,8 +4,6 @@ import { AnimatePresence } from 'framer-motion';
 import { Sidebar, type ChatHistoryEntry, type ChatFolder } from '@/components/layout/Sidebar';
 import { FolderModal } from '@/components/layout/FolderModal';
 import { ChatArea } from '@/components/chat/ChatArea';
-import { AuthScreen } from '@/components/auth/AuthScreen';
-import { ProfileSettings } from '@/components/auth/ProfileSettings';
 import { IntelligencePanel } from '@/components/intelligence/IntelligencePanel';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 import { SchedulerPanel } from '@/components/scheduler/SchedulerPanel';
@@ -14,12 +12,12 @@ import { SystemDock } from '@/components/system/SystemDock';
 import { SystemMonitorButton } from '@/components/system/SystemMonitorButton';
 import { ToastProvider } from '@/components/ui/Toast';
 import { useChat } from '@/hooks/useChat';
-import { useAuth } from '@/hooks/useAuth';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import { useVisualViewport } from '@/hooks/useVisualViewport';
 import { generateSessionId } from '@/lib/utils';
 import * as chatRuns from '@/lib/chatRuns';
 import { generateTitle, clearHistory, listSessions } from '@/lib/api';
 
-const GUEST_MAX_MESSAGES = 5;
 const HISTORY_STORAGE_KEY = 'nova-chat-history';
 const FOLDERS_STORAGE_KEY = 'nova-chat-folders';
 
@@ -73,6 +71,16 @@ export function ChatPage() {
   // something behind it. `promoteToStartedChat` puts it there on first send.
   const [activeSessionId, setActiveSessionIdState] = useState(() => sessionIdParam ?? generateSessionId());
   const isDraft = !sessionIdParam;
+  const isMobile = useIsMobile();
+  const viewport = useVisualViewport();
+
+  // The chat owns the whole viewport and scrolls only on the inside — see
+  // `.app-shell` in index.css. Scoped to this page so the landing and the docs
+  // still scroll as documents.
+  useEffect(() => {
+    document.documentElement.classList.add('app-shell');
+    return () => document.documentElement.classList.remove('app-shell');
+  }, []);
 
   useEffect(() => {
     if (sessionIdParam) {
@@ -86,14 +94,36 @@ export function ChatPage() {
     setActiveSessionIdState(generateSessionId());
   }, [sessionIdParam]);
 
-  /** Switch chats by pushing a new URL — the effect above syncs local state. */
+  /**
+   * Switch chats by pushing a new URL — the effect above syncs local state.
+   *
+   * On a phone the switch stays in local state and the URL is left alone.
+   * Installed to the home screen, NOVA runs as a standalone app, and there a
+   * history entry per chat is not navigation the user asked for: it makes the
+   * back gesture walk through past conversations, and on iOS a URL change in
+   * standalone mode is what pulls Safari's address bar and toolbar back over
+   * the app. Reload-to-the-same-chat is a desktop affordance worth trading for
+   * that, since a phone rarely reloads and never shares the address bar.
+   */
   const setActiveSessionId = useCallback(
-    (id: string) => navigate(`/chat/${id}`),
-    [navigate],
+    (id: string) => {
+      if (isMobile) {
+        setActiveSessionIdState(id);
+        return;
+      }
+      navigate(`/chat/${id}`);
+    },
+    [isMobile, navigate],
   );
 
   /** Start a fresh, unstarted chat. */
-  const goToNewChat = useCallback(() => navigate('/new-chat'), [navigate]);
+  const goToNewChat = useCallback(() => {
+    if (isMobile) {
+      setActiveSessionIdState(generateSessionId());
+      return;
+    }
+    navigate('/new-chat');
+  }, [isMobile, navigate]);
 
   /**
    * Move a draft chat into the URL, now that it has a message behind it.
@@ -103,13 +133,12 @@ export function ChatPage() {
    * blank chat rather than out of the conversation.
    */
   const promoteToStartedChat = useCallback(() => {
+    if (isMobile) return; // The phone never puts the chat id in the URL.
     if (isDraft) navigate(`/chat/${activeSessionId}`, { replace: true });
-  }, [isDraft, activeSessionId, navigate]);
+  }, [isMobile, isDraft, activeSessionId, navigate]);
 
   const [chatHistory, setChatHistory] = useState<ChatHistoryEntry[]>([]);
   const [folders, setFolders] = useState<ChatFolder[]>([]);
-  const [showAuth, setShowAuth] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showIntelligence, setShowIntelligence] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
@@ -120,16 +149,10 @@ export function ChatPage() {
     editing: null,
   });
 
-  const { user, authState, isAuthenticated, isGuest, login, register, confirm, logout, updateName, updatePicture, changePassword, deleteAccount } = useAuth();
-
-  // In dev mode, skip auth entirely — always show full UI
-  const effectiveIsAuthenticated = !import.meta.env.PROD || isAuthenticated;
-  const effectiveIsGuest = import.meta.env.PROD ? isGuest : false;
-
-  // Namespace for persisting chat history / folders in localStorage.
-  // In dev mode there is no Cognito user, so fall back to a stable local key
-  // — otherwise the sidebar history would never load or persist.
-  const effectiveUserId = user?.sub ?? (import.meta.env.PROD ? null : 'local-dev');
+  // Namespace for persisting chat history / folders in localStorage. NOVA
+  // runs on one person's machine, so the namespace is a constant — it stays
+  // in the key so an existing install's history survives this change.
+  const storageKey = 'local-dev';
 
   const sessionJustChanged = useRef(false);
   const titleGeneratedFor = useRef<Set<string>>(new Set());
@@ -167,10 +190,8 @@ export function ChatPage() {
   }, [loadHistory, activeSessionId]);
 
   useEffect(() => {
-    if (!effectiveIsAuthenticated || !effectiveUserId) return;
-
-    const savedHistory = loadPersistedHistory(effectiveUserId);
-    const savedFolders = loadPersistedFolders(effectiveUserId);
+    const savedHistory = loadPersistedHistory(storageKey);
+    const savedFolders = loadPersistedFolders(storageKey);
     if (savedFolders.length > 0) setFolders(savedFolders);
 
     // The backend (data/sessions/*.json) is the source of truth for which
@@ -203,19 +224,15 @@ export function ChatPage() {
         for (const e of savedHistory) titleGeneratedFor.current.add(e.id);
         if (savedHistory.length > 0) setChatHistory(savedHistory);
       });
-  }, [effectiveIsAuthenticated, effectiveUserId]);
+  }, []);
 
   useEffect(() => {
-    if (effectiveIsAuthenticated && effectiveUserId && chatHistory.length > 0) {
-      persistHistory(effectiveUserId, chatHistory);
-    }
-  }, [chatHistory, effectiveIsAuthenticated, effectiveUserId]);
+    if (chatHistory.length > 0) persistHistory(storageKey, chatHistory);
+  }, [chatHistory]);
 
   useEffect(() => {
-    if (effectiveIsAuthenticated && effectiveUserId) {
-      persistFolders(effectiveUserId, folders);
-    }
-  }, [folders, effectiveIsAuthenticated, effectiveUserId]);
+    persistFolders(storageKey, folders);
+  }, [folders]);
 
   useEffect(() => {
     sessionJustChanged.current = true;
@@ -232,7 +249,7 @@ export function ChatPage() {
   }, [activeChatTitle]);
 
   useEffect(() => {
-    if (!effectiveIsAuthenticated || messages.length === 0) return;
+    if (messages.length === 0) return;
 
     if (sessionJustChanged.current) {
       sessionJustChanged.current = false;
@@ -270,7 +287,7 @@ export function ChatPage() {
         );
       });
     }
-  }, [messages, activeSessionId, effectiveIsAuthenticated]);
+  }, [messages, activeSessionId]);
 
   /* ── Session handlers ───────────────────────────────────── */
 
@@ -348,67 +365,31 @@ export function ChatPage() {
     );
   }, []);
 
-  /* ── Auth handlers ──────────────────────────────────────── */
-
-  const handleLogin = useCallback(async (email: string, password: string) => {
-    const u = await login(email, password);
-    setShowAuth(false);
-    return u;
-  }, [login]);
-
-  const handleLogout = useCallback(() => {
-    logout();
-    chatRuns.discardAll();
-    setChatHistory([]);
-    setFolders([]);
-    goToNewChat();
-    setShowSettings(false);
-  }, [logout, goToNewChat]);
-
-  const openAuth = useCallback(() => setShowAuth(true), []);
-  const openSettings = useCallback(() => setShowSettings(true), []);
   const openIntelligence = useCallback(() => setShowIntelligence(true), []);
   const openAppSettings = useCallback(() => setShowAppSettings(true), []);
   const openScheduler = useCallback(() => setShowScheduler(true), []);
   const openConnections = useCallback(() => setShowConnections(true), []);
 
-  const userMessageCount = messages.filter((m) => m.role === 'user').length;
-  const guestLimitReached = effectiveIsGuest && userMessageCount >= GUEST_MAX_MESSAGES;
-
-  if (import.meta.env.PROD && authState === 'loading') {
-    return (
-      <div className="flex h-screen items-center justify-center bg-surface-950">
-        <div className="text-center">
-          <h1 className="text-xl font-bold text-primary-400 text-glow">NOVA</h1>
-          <div className="mt-3 flex justify-center gap-1">
-            {[0, 1, 2].map((i) => (
-              <span
-                key={i}
-                className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary-500"
-                style={{ animationDelay: `${i * 200}ms` }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (showAuth) {
-    return (
-      <ToastProvider>
-        <AuthScreen
-          onLogin={handleLogin}
-          onRegister={register}
-          onConfirm={confirm}
-        />
-      </ToastProvider>
-    );
-  }
-
   return (
     <ToastProvider>
-      <div className="relative flex h-screen overflow-hidden">
+      {/* `h-full`, filling the fixed body from index.css, rather than a viewport
+          unit: with `viewport-fit=cover` that body spans the whole screen, edge
+          to edge, so the sidebar's surface runs right down into the home-bar
+          strip instead of stopping above a black band. What keeps the UI off
+          the hardware is the safe-area padding inside each column.
+
+          Once the keyboard is up, the shell is pinned to the visible area
+          instead: it takes the visual viewport's height and follows its offset,
+          so iOS sliding that viewport up no longer carries the app off the top
+          of the screen. The sidebar stays put and only the chat gives way. */}
+      <div
+        className="relative flex h-full overflow-hidden"
+        style={
+          viewport.keyboardInset
+            ? { height: viewport.height, transform: `translateY(${viewport.offsetTop}px)` }
+            : undefined
+        }
+      >
         {/* Column, not a single pane: the resource dock takes the bottom of
             the chat and the conversation shrinks above it instead of being
             covered by an overlay. */}
@@ -429,49 +410,35 @@ export function ChatPage() {
               onStop={stop}
               onRetry={retry}
               onEditMessage={editMessage}
-              isGuest={effectiveIsGuest}
-              guestMessageCount={userMessageCount}
-              guestMaxMessages={GUEST_MAX_MESSAGES}
-              guestLimitReached={guestLimitReached}
-              onLogin={openAuth}
             />
 
-            {/* Signed-in only: it reports the machine NOVA runs on, not the
-                visitor's. */}
             <AnimatePresence>
-              {effectiveIsAuthenticated && !showSystemDock && (
+              {!showSystemDock && (
                 <SystemMonitorButton onClick={() => setShowSystemDock(true)} />
               )}
             </AnimatePresence>
           </div>
 
-          {effectiveIsAuthenticated && (
-            <SystemDock open={showSystemDock} onClose={() => setShowSystemDock(false)} />
-          )}
+          <SystemDock open={showSystemDock} onClose={() => setShowSystemDock(false)} />
         </main>
 
-        {effectiveIsAuthenticated && (
           <Sidebar
-            chatHistory={chatHistory}
-            folders={folders}
-            activeSessionId={activeSessionId}
-            onSelectSession={handleSelectSession}
-            onNewChat={handleNewChat}
-            onDeleteChat={handleDeleteChat}
-            onRenameChat={handleRenameChat}
-            onMoveToFolder={handleMoveToFolder}
-            onCreateFolder={handleCreateFolder}
-            onEditFolder={handleEditFolder}
-            onDeleteFolder={handleDeleteFolder}
-            user={user ? { name: user.name, email: user.email, picture: user.picture } : undefined}
-            onLogout={handleLogout}
-            onOpenSettings={openSettings}
-            onOpenIntelligence={openIntelligence}
-            onOpenScheduler={openScheduler}
-            onOpenConnections={openConnections}
-            onOpenAppSettings={openAppSettings}
-          />
-        )}
+          chatHistory={chatHistory}
+          folders={folders}
+          activeSessionId={activeSessionId}
+          onSelectSession={handleSelectSession}
+          onNewChat={handleNewChat}
+          onDeleteChat={handleDeleteChat}
+          onRenameChat={handleRenameChat}
+          onMoveToFolder={handleMoveToFolder}
+          onCreateFolder={handleCreateFolder}
+          onEditFolder={handleEditFolder}
+          onDeleteFolder={handleDeleteFolder}
+          onOpenIntelligence={openIntelligence}
+          onOpenScheduler={openScheduler}
+          onOpenConnections={openConnections}
+          onOpenAppSettings={openAppSettings}
+        />
 
         <FolderModal
           open={folderModal.open}
@@ -500,19 +467,6 @@ export function ChatPage() {
           onClose={() => setShowConnections(false)}
         />
 
-        <AnimatePresence>
-          {showSettings && user && (
-            <ProfileSettings
-              user={user}
-              onClose={() => setShowSettings(false)}
-              onUpdateName={updateName}
-              onUpdatePicture={updatePicture}
-              onChangePassword={changePassword}
-              onDeleteAccount={deleteAccount}
-              onLogout={handleLogout}
-            />
-          )}
-        </AnimatePresence>
       </div>
     </ToastProvider>
   );

@@ -124,7 +124,10 @@ export function ChatMessage({
         <div
           ref={bubbleRef}
           style={editing && lockedWidth ? { width: lockedWidth } : undefined}
-          className={`group relative min-w-0 max-w-[75%] space-y-2 rounded-xl px-4 py-3 ${
+          // 75% of a phone's width leaves a bubble barely wider than a few
+          // words, so the message takes nearly the whole column there and the
+          // side it hangs off still says who wrote it.
+          className={`group relative min-w-0 max-w-[92%] space-y-2 rounded-xl px-4 py-3 md:max-w-[75%] ${
             isUser
               ? 'bg-primary-900/40 text-primary-100 ring-1 ring-primary-800/50'
               : 'border border-surface-700/50 bg-surface-900'

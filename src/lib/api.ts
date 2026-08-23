@@ -2,31 +2,13 @@ import type { AuthorizeUrlResponse, ChatResponse, ConnectionListResponse, GitHub
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-/**
- * Authorization header for endpoints whose data belongs to one user.
- *
- * Connections hold live access to somebody's mailbox and files, so the
- * backend has to know who is asking — without this every user would share a
- * single set of tokens. Returns an empty object when signed out, which the
- * backend treats as the local single-user identity.
- */
-async function authHeaders(): Promise<Record<string, string>> {
-  try {
-    const { getIdToken } = await import('./auth');
-    const token = await getIdToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  } catch {
-    return {};
-  }
-}
-
 export async function sendMessage(
   sessionId: string,
   message: string
 ): Promise<ChatResponse> {
   const res = await fetch(`${API_BASE}/api/v1/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, session_id: sessionId }),
   });
   if (!res.ok) {
@@ -106,7 +88,7 @@ export async function sendMessageStream(
   const res = await fetch(`${API_BASE}/api/v1/chat/stream`, {
     method: 'POST',
     // The JWT tells the backend whose connected accounts the agent acts on.
-    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, session_id: sessionId }),
     signal,
   });
@@ -438,9 +420,7 @@ export async function getTaskExecutionLogs(
 /* ── External service connections ─────────────────────────── */
 
 export async function getConnections(): Promise<ConnectionListResponse> {
-  const res = await fetch(`${API_BASE}/api/v1/connections`, {
-    headers: await authHeaders(),
-  });
+  const res = await fetch(`${API_BASE}/api/v1/connections`);
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json() as Promise<ConnectionListResponse>;
 }
@@ -457,7 +437,7 @@ export async function getAuthorizeUrl(
 ): Promise<AuthorizeUrlResponse> {
   const res = await fetch(
     `${API_BASE}/api/v1/connections/${provider}/authorize?lang=${lang}`,
-    { method: 'POST', headers: await authHeaders() },
+    { method: 'POST' },
   );
   if (!res.ok) {
     const detail = await res.text();
@@ -469,7 +449,6 @@ export async function getAuthorizeUrl(
 export async function disconnectProvider(provider: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/v1/connections/${provider}`, {
     method: 'DELETE',
-    headers: await authHeaders(),
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
 }
@@ -481,7 +460,7 @@ export async function saveProviderCredentials(
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/api/v1/connections/${provider}/credentials`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) {
@@ -493,7 +472,6 @@ export async function saveProviderCredentials(
 export async function clearProviderCredentials(provider: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/v1/connections/${provider}/credentials`, {
     method: 'DELETE',
-    headers: await authHeaders(),
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
 }
@@ -508,7 +486,7 @@ export async function getGitHubManifest(
   if (org) params.set('org', org);
   const res = await fetch(
     `${API_BASE}/api/v1/connections/github/setup/manifest?${params}`,
-    { method: 'POST', headers: await authHeaders() },
+    { method: 'POST' },
   );
   if (!res.ok) {
     const detail = await res.text();

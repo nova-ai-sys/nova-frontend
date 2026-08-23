@@ -4,6 +4,7 @@ import { Send, Paperclip, X, FileText, Square } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/lib/i18n';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { isSupported, readFile, type FileReadResult } from '@/lib/fileUtils';
 
 interface ChatInputProps {
@@ -98,11 +99,18 @@ export function ChatInput({ onSend, isLoading, onStop, externalFiles, onExternal
   };
 
   const hasContent = value.trim() || files.length > 0;
+  const isMobile = useIsMobile();
 
-  return (
+  const composer = (
     <motion.form
       onSubmit={handleSubmit}
-      className="overflow-hidden rounded-xl border border-surface-700/50 bg-surface-900 transition-colors focus-within:border-primary-700/50 focus-within:glow-green"
+      // The phone composer floats over the conversation, so it needs an opaque
+      // surface of its own to stay readable; the pill radius is what marks it
+      // as a thumb target rather than a panel. On desktop it sits in its own
+      // row and takes the same surface at the page's usual radius.
+      className={`overflow-hidden border border-surface-700/50 bg-surface-900 transition-colors focus-within:border-primary-700/50 focus-within:glow-green ${
+        isMobile ? 'rounded-[32px]' : 'rounded-xl'
+      }`}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
@@ -140,8 +148,11 @@ export function ChatInput({ onSend, isLoading, onStop, externalFiles, onExternal
         )}
       </AnimatePresence>
 
-      {/* Input row */}
-      <div className="flex items-end gap-2 px-4 py-3">
+      {/* Input row. On a phone it collapses to a single horizontal bar: one
+          line high, centred, and with no placeholder — an empty composer under
+          a conversation needs no caption explaining what it is, and the row is
+          shorter without one. */}
+      <div className={`flex gap-2 px-4 ${isMobile ? 'items-center py-2' : 'items-end py-3'}`}>
         <input
           ref={fileInputRef}
           type="file"
@@ -157,7 +168,7 @@ export function ChatInput({ onSend, isLoading, onStop, externalFiles, onExternal
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
           title={t('chat.attach')}
-          className="mb-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400 disabled:opacity-40"
+          className="flex h-9 w-9 shrink-0 max-md:mb-0 md:mb-1 cursor-pointer items-center justify-center rounded-lg text-surface-500 transition-colors hover:bg-surface-800 hover:text-primary-400 disabled:opacity-40"
         >
           <Paperclip className="h-4 w-4" />
         </button>
@@ -170,10 +181,12 @@ export function ChatInput({ onSend, isLoading, onStop, externalFiles, onExternal
             adjustHeight();
           }}
           onKeyDown={handleKeyDown}
-          placeholder={t('chat.placeholder')}
-          rows={2}
+          placeholder={isMobile ? undefined : t('chat.placeholder')}
+          rows={isMobile ? 1 : 2}
           disabled={isLoading || disabled}
-          className="flex-1 resize-none bg-transparent py-2 text-sm leading-relaxed text-surface-100 placeholder:text-surface-600 focus:outline-none disabled:opacity-50"
+          className={`flex-1 resize-none bg-transparent text-sm leading-relaxed text-surface-100 placeholder:text-surface-600 focus:outline-none disabled:opacity-50 ${
+            isMobile ? 'py-1.5' : 'py-2'
+          }`}
         />
 
         {/* While generating, the send button becomes a stop button. */}
@@ -183,7 +196,7 @@ export function ChatInput({ onSend, isLoading, onStop, externalFiles, onExternal
             onClick={onStop}
             title={t('chat.stop')}
             aria-label={t('chat.stop')}
-            className="mb-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-surface-800 text-surface-200 ring-1 ring-surface-600/50 transition-colors hover:bg-red-950/50 hover:text-red-400 hover:ring-red-800/50"
+            className="flex h-9 w-9 shrink-0 max-md:mb-0 md:mb-1 cursor-pointer items-center justify-center rounded-lg bg-surface-800 text-surface-200 ring-1 ring-surface-600/50 transition-colors hover:bg-red-950/50 hover:text-red-400 hover:ring-red-800/50"
           >
             <Square className="h-3.5 w-3.5 fill-current" />
           </button>
@@ -192,7 +205,7 @@ export function ChatInput({ onSend, isLoading, onStop, externalFiles, onExternal
             type="submit"
             size="icon"
             disabled={!hasContent || isLoading || disabled}
-            className="mb-1 shrink-0 rounded-lg"
+            className="shrink-0 rounded-lg max-md:mb-0 md:mb-1"
           >
             <Send className="h-4 w-4" />
           </Button>
@@ -200,4 +213,6 @@ export function ChatInput({ onSend, isLoading, onStop, externalFiles, onExternal
       </div>
     </motion.form>
   );
+
+  return composer;
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, type DragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Upload, RotateCcw, LogIn, DatabaseZap } from 'lucide-react';
+import { Upload, RotateCcw, DatabaseZap, ChevronDown } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { WelcomeScreen } from './WelcomeScreen';
@@ -8,10 +8,10 @@ import { NovaSparkle } from '@/components/ui/NovaSparkle';
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
 import { ToolBadge } from './ToolBadge';
 import { AgentFlow, MESSAGE_COLUMN_CLASS, type TaskStateInfo } from './AgentFlowLive';
-import { GuestBanner } from '@/components/auth/GuestBanner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/lib/i18n';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { isSupported, readFile, type FileReadResult } from '@/lib/fileUtils';
 import type { AgentPlanTask, ToolInfo } from '@/lib/types';
 
@@ -34,6 +34,53 @@ function useCyclingText(phrases: string[], active: boolean, intervalMs = 2800): 
   }, [active, intervalMs]);
 
   return phrases[index];
+}
+
+/**
+ * Frosted strip under the status bar / dynamic island.
+ *
+ * A solid bar would just be a black shelf the chat starts below. This instead
+ * lets the conversation scroll right up to the top edge and dissolve behind the
+ * island: the blur is strongest against the hardware and fades to nothing a
+ * little below it, so a message travelling up goes soft before it disappears.
+ *
+ * Phones only — `env(safe-area-inset-top)` is 0 everywhere else, which would
+ * leave a zero-height element blurring nothing.
+ */
+function TopScrim() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-x-0 top-0 z-20 hidden h-[calc(env(safe-area-inset-top)+1.5rem)] backdrop-blur-md max-md:block"
+      style={{
+        // The mask is what makes it a fade rather than an edge: fully opaque
+        // over the island, gone by the bottom of the strip.
+        maskImage: 'linear-gradient(to bottom, black 45%, transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to bottom, black 45%, transparent 100%)',
+      }}
+    />
+  );
+}
+
+/** The "back to the latest message" control, minus whatever surface it sits on. */
+function JumpButton({ size, label, onClick, className = '' }: {
+  size: number;
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      style={{ width: size, height: size }}
+      className={`flex cursor-pointer items-center justify-center rounded-full text-primary-300 transition-colors hover:text-primary-200 ${className}`}
+    >
+      <ChevronDown className="h-5 w-5 md:h-4 md:w-4" />
+    </button>
+  );
 }
 
 interface Message {
@@ -62,11 +109,6 @@ interface ChatAreaProps {
   onStop?: () => void;
   onRetry: () => void;
   onEditMessage: (id: string, newContent: string) => void;
-  isGuest?: boolean;
-  guestMessageCount?: number;
-  guestMaxMessages?: number;
-  guestLimitReached?: boolean;
-  onLogin?: () => void;
 }
 
 export function ChatArea({
@@ -83,22 +125,17 @@ export function ChatArea({
   onStop,
   onRetry,
   onEditMessage,
-  isGuest = false,
-  guestMessageCount = 0,
-  guestMaxMessages = 5,
-  guestLimitReached = false,
-  onLogin,
 }: ChatAreaProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<FileReadResult[]>([]);
   const dragCounter = useRef(0);
   const { toast } = useToast();
   const { t } = useI18n();
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-
-  // Show banner after first guest message
-  const showGuestBanner = isGuest && guestMessageCount > 0 && (!bannerDismissed || guestLimitReached);
+  const [showJumpToEnd, setShowJumpToEnd] = useState(false);
+  const isMobile = useIsMobile();
+  const jumpButtonSize = isMobile ? 48 : 36;
 
   // The backend's own status text ("Processing", "Loading model...") is an
   // internal signal, not copy — this always drives the bubble's text itself,
@@ -121,9 +158,28 @@ export function ChatArea({
       : null
     : cyclingThinkingText;
 
+  /* Reading back through a long answer means scrolling up, and with a reply
+     still streaming there is no obvious way back down. The button only exists
+     once there is somewhere to go: within a screen of the end it would just be
+     clutter over the conversation. */
+  const syncJumpToEnd = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setShowJumpToEnd(el.scrollHeight - el.scrollTop - el.clientHeight > 160);
+  }, []);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading, streamingContent]);
+    // Growing the conversation moves the end away without the user scrolling,
+    // so the button cannot be left to scroll events alone — re-check once the
+    // smooth scroll has landed, which is where the view actually ends up.
+    const settled = setTimeout(syncJumpToEnd, 400);
+    return () => clearTimeout(settled);
+  }, [messages, isLoading, streamingContent, syncJumpToEnd]);
+
+  const jumpToEnd = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   const handleDragEnter = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -260,7 +316,7 @@ export function ChatArea({
         </div>
       ) : historyUnavailable && isEmpty && !isLoading ? (
         /* Session data unavailable */
-        <div className="flex h-full flex-col items-center justify-center px-4 pb-6">
+        <div className="flex h-full flex-col items-center justify-center px-4 pb-6 max-md:px-3 max-md:pb-1.5">
           <motion.div
             className="flex flex-col items-center gap-4 rounded-xl border border-surface-700/30 bg-surface-900/50 px-8 py-8"
             initial={{ opacity: 0, y: 10 }}
@@ -283,30 +339,18 @@ export function ChatArea({
               onStop={onStop}
               externalFiles={droppedFiles}
               onExternalFilesConsumed={handleDroppedFilesConsumed}
-              disabled={guestLimitReached}
             />
           </div>
         </div>
       ) : isEmpty && !isLoading ? (
-        /* Welcome layout: title + input centered */
-        <div className="flex h-full flex-col items-center justify-center px-4 pb-6">
-          <div className="mb-8 -mt-16">
+        /* Welcome layout: title + input centered. On a phone the composer
+           drops to the bottom edge, where the thumb already is, and the NOVA
+           wordmark steps aside — the screen is too short to spend on a title
+           the sidebar already carries. */
+        <div className="flex h-full flex-col items-center justify-end px-4 pb-6 max-md:px-3 max-md:pb-1.5 md:justify-center">
+          <div className="mb-8 hidden -mt-16 md:block">
             <WelcomeScreen />
           </div>
-
-          {/* Guest login prompt */}
-          {isGuest && (
-            <motion.button
-              onClick={onLogin}
-              className="mb-6 flex cursor-pointer items-center gap-2 rounded-lg border border-primary-900/50 bg-primary-950/30 px-5 py-2.5 text-xs font-semibold text-primary-400 transition-all hover:border-primary-700/50 hover:bg-primary-950/50 hover:glow-green"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <LogIn className="h-3.5 w-3.5" />
-              Register or Login to unlock all features
-            </motion.button>
-          )}
 
           <div className="w-full max-w-3xl">
             <ChatInput
@@ -315,14 +359,20 @@ export function ChatArea({
               onStop={onStop}
               externalFiles={droppedFiles}
               onExternalFilesConsumed={handleDroppedFilesConsumed}
-              disabled={guestLimitReached}
             />
           </div>
         </div>
       ) : (
         /* Chat layout: messages scrollable + input at bottom */
         <>
-          <div className="flex-1 overflow-y-auto px-4 py-6 scrollbar-thin">
+          <TopScrim />
+          {/* The phone's bottom padding is what the floating composer stands
+              in — without it the last message would end up underneath it. */}
+          <div
+            ref={scrollerRef}
+            onScroll={syncJumpToEnd}
+            className="chat-scroller flex-1 overflow-y-auto px-4 py-6 scrollbar-thin max-md:pb-36 max-md:pt-[calc(env(safe-area-inset-top)+1rem)]"
+          >
             {/* Wider than the message measure on purpose: bubbles cap
                 themselves at `MESSAGE_COLUMN_CLASS`, and the extra room is
                 what the agent flow diagram expands into. */}
@@ -422,49 +472,45 @@ export function ChatArea({
             </div>
           </div>
 
-          <div className="mx-auto w-full max-w-3xl px-4 pb-4">
-            {/* Guest banner notification */}
-            {showGuestBanner && onLogin && (
-              <GuestBanner
-                messageCount={guestMessageCount}
-                maxMessages={guestMaxMessages}
-                visible={showGuestBanner}
-                onLogin={onLogin}
-                onDismiss={() => setBannerDismissed(true)}
-              />
-            )}
-
-            {/* Blocked state for guests who hit the limit */}
-            {guestLimitReached ? (
-              <motion.div
-                className="flex flex-col items-center gap-3 rounded-xl border border-primary-900/50 bg-surface-900/80 px-6 py-5"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <p className="text-sm font-semibold text-surface-300">
-                  You&apos;ve reached the guest limit
-                </p>
-                <p className="text-xs text-surface-500">
-                  Create a free account to continue chatting with NOVA
-                </p>
-                <button
-                  onClick={onLogin}
-                  className="mt-1 flex cursor-pointer items-center gap-2 rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-bold text-surface-950 transition-all hover:bg-primary-500 hover:glow-green"
+          {/* Lifted out of the flow on a phone so the conversation runs on
+              underneath the composer rather than stopping above it.
+              No safe-area padding: the composer goes right down to the bottom
+              edge, and the clearance the home bar needs is inside the bar —
+              the scroller's own bottom padding above it, and the composer's
+              rounded body, which keeps the controls off the hardware. */}
+          <div className="relative mx-auto w-full max-w-3xl px-4 pb-4 max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:px-3 max-md:pb-1.5">
+            {/* Anchored to the composer rather than to the scroll area, so it
+                rides above the input in both layouts — the phone's floating
+                one and the desktop's in-flow row. */}
+            <AnimatePresence>
+              {showJumpToEnd && (
+                <motion.div
+                  className="absolute -top-[68px] left-1/2 z-10 -translate-x-1/2 md:-top-12"
+                  initial={{ opacity: 0, y: 6, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.9 }}
+                  transition={{ duration: 0.15 }}
                 >
-                  <LogIn className="h-4 w-4" />
-                  Register or Login
-                </button>
-              </motion.div>
-            ) : (
-              <ChatInput
-                onSend={onSend}
-                isLoading={isLoading}
-                onStop={onStop}
-                externalFiles={droppedFiles}
-                onExternalFilesConsumed={handleDroppedFilesConsumed}
-                disabled={guestLimitReached}
-              />
-            )}
+                  {/* The thumb target is larger on a phone (see
+                      `jumpButtonSize`); the surface is the same dark pill on
+                      both. */}
+                  <JumpButton
+                    size={jumpButtonSize}
+                    label={t('chat.jumpToEnd')}
+                    onClick={jumpToEnd}
+                    className="border border-primary-800/50 bg-surface-900/90 shadow-lg shadow-black/50 backdrop-blur-sm hover:border-primary-600/60 hover:bg-surface-800"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <ChatInput
+              onSend={onSend}
+              isLoading={isLoading}
+              onStop={onStop}
+              externalFiles={droppedFiles}
+              onExternalFilesConsumed={handleDroppedFilesConsumed}
+            />
           </div>
         </>
       )}

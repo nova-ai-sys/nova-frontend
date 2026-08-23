@@ -45,6 +45,58 @@
   * {
     @apply border-surface-700;
   }
+
+  /* Phone type scale: everything sized in rem steps down together, so the
+     proportions of the desktop design survive — only the absolute size drops. */
+  @media (max-width: 767px) {
+    html {
+      font-size: 15px;
+    }
+
+    /* Softer corners throughout, iOS-style. Bumping Tailwind's radius scale
+       itself rather than hunting down `rounded-*` one by one means every
+       button, card and field rounds off together and keeps its relative
+       hierarchy — roughly one step up the scale, not a jump to pills. */
+    :root {
+      --radius-xs: 0.25rem;
+      --radius-sm: 0.375rem;
+      --radius-md: 0.5rem;
+      --radius-lg: 0.75rem;
+      --radius-xl: 1rem;
+      --radius-2xl: 1.25rem;
+      --radius-3xl: 1.75rem;
+    }
+  }
+}
+
+@layer base {
+  /* The app shell (the chat) is a fixed viewport with its own scrollers
+     inside — the page itself must never move. Without this, dragging the chat
+     past its end rubber-bands the whole document on iOS, and on a home-screen
+     PWA that gesture is what summons Safari's chrome back over the app.
+     `.app-shell` is set on <html> by the pages that own the full viewport, so
+     the landing page and the docs keep scrolling normally. */
+  html.app-shell,
+  html.app-shell body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    /* Kills the double-tap-to-zoom delay as well as the gesture itself. */
+    touch-action: manipulation;
+  }
+
+  html.app-shell body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+  }
+
+  /* The app measures itself against this chain rather than a viewport unit, so
+     it fills the screen once and stays put — `dvh` re-measures every time iOS
+     slides its bars in or out, and the whole layout twitches with it. */
+  html.app-shell #root {
+    height: 100%;
+  }
 }
 
 @layer base {
@@ -92,6 +144,25 @@
 }
 
 @layer utilities {
+  /* WebKit draws a long scroller in tiles and only repaints the ones it thinks
+     changed. A filtered layer parked over it — the composer, the top scrim —
+     confuses that bookkeeping, and tiles that scroll into view under the filter
+     arrive blank: whole paragraphs missing until something else forces a paint.
+
+     `will-change: transform` made this WORSE, not better: it pins the scroller
+     into a permanent composited layer, which is exactly the layer whose tiles
+     go stale. What helps instead is telling WebKit that each message is its own
+     independent paint unit, so a tile can be rebuilt without the whole layer
+     being trusted as unchanged. */
+  .chat-scroller {
+    /* No `will-change` here. See above — it is the cause, not the cure. */
+    transform: translateZ(0);
+  }
+
+  .chat-scroller > * > * {
+    contain: paint layout style;
+  }
+
   /* Slightly thicker, auto-hiding overlay scrollbar.
      Hidden when idle; revealed on hover or while `.is-scrolling` is toggled
      (see src/lib/scrollbars.ts). No native arrow buttons. */

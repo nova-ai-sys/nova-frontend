@@ -47,14 +47,12 @@ function openAuthPopup(url: string): Window | null {
 interface ProviderCardProps {
   conn: ConnectionStatus;
   busy: boolean;
-  /** Registering the OAuth app is an operator action, not a user one. */
-  isAdmin: boolean;
   onConnect: () => void;
   onDisconnect: () => void;
   onSetup: () => void;
 }
 
-function ProviderCard({ conn, busy, isAdmin, onConnect, onDisconnect, onSetup }: ProviderCardProps) {
+function ProviderCard({ conn, busy, onConnect, onDisconnect, onSetup }: ProviderCardProps) {
   const { t } = useI18n();
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const Icon = PROVIDER_ICONS[conn.provider];
@@ -101,8 +99,8 @@ function ProviderCard({ conn, busy, isAdmin, onConnect, onDisconnect, onSetup }:
           )}
         </div>
 
-        {/* Re-run the wizard on an already-registered provider (operator only). */}
-        {isAdmin && conn.configured && !confirmDisconnect && (
+        {/* Re-run the wizard on an already-registered provider. */}
+        {conn.configured && !confirmDisconnect && (
           <button
             onClick={onSetup}
             title={t('conn.reconfigure')}
@@ -113,20 +111,14 @@ function ProviderCard({ conn, busy, isAdmin, onConnect, onDisconnect, onSetup }:
         )}
 
         {!conn.configured ? (
-          isAdmin ? (
-            <button
-              onClick={onSetup}
-              title={t('conn.notConfiguredHint')}
-              className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[10px] text-amber-400 transition-colors hover:bg-amber-950/60"
-            >
-              <AlertCircle className="h-3 w-3" />
-              {t('conn.setup')}
-            </button>
-          ) : (
-            <span className="shrink-0 rounded-lg border border-surface-700/40 px-2 py-1 text-[10px] text-surface-500">
-              {t('conn.unavailable')}
-            </span>
-          )
+          <button
+            onClick={onSetup}
+            title={t('conn.notConfiguredHint')}
+            className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[10px] text-amber-400 transition-colors hover:bg-amber-950/60"
+          >
+            <AlertCircle className="h-3 w-3" />
+            {t('conn.setup')}
+          </button>
         ) : conn.connected ? (
           confirmDisconnect ? (
             <div className="flex shrink-0 gap-1">
@@ -181,7 +173,7 @@ interface ConnectionsPanelProps {
 export function ConnectionsPanel({ open, onClose }: ConnectionsPanelProps) {
   const { t, lang } = useI18n();
   // Shared with the sidebar, so connecting here re-tints its service marks.
-  const { connections, isAdmin, refresh } = useConnections();
+  const { connections, refresh } = useConnections();
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -265,10 +257,7 @@ export function ConnectionsPanel({ open, onClose }: ConnectionsPanelProps) {
   }, [load, t]);
 
   const connectedCount = connections.filter((c) => c.connected).length;
-  // Guard against a stale setup view if admin status arrives after opening.
-  const setupTarget = isAdmin
-    ? connections.find((c) => c.provider === setupProvider)
-    : undefined;
+  const setupTarget = connections.find((c) => c.provider === setupProvider);
 
   if (setupTarget) {
     return (
@@ -311,7 +300,6 @@ export function ConnectionsPanel({ open, onClose }: ConnectionsPanelProps) {
             <ProviderCard
               key={conn.provider}
               conn={conn}
-              isAdmin={isAdmin}
               busy={pending === conn.provider}
               onConnect={() => handleConnect(conn.provider)}
               onDisconnect={() => handleDisconnect(conn.provider)}

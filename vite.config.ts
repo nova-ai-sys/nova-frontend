@@ -4,9 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { readFileSync, existsSync } from 'fs'
 
-const envDir = path.resolve(__dirname, '..');
+const envDir = __dirname;
 
-const manifestPath = path.resolve(__dirname, '../.release-please-manifest.json');
+const manifestPath = path.resolve(__dirname, '.release-please-manifest.json');
 let appVersion = '0.0.0';
 if (existsSync(manifestPath)) {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
@@ -35,7 +35,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
-    base: './',
+    base: '/',
     envDir,
     define: {
       __APP_VERSION__: JSON.stringify(appVersion),

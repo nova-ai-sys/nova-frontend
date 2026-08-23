@@ -412,7 +412,6 @@ export interface ConnectionStatus {
 export interface ConnectionListResponse {
   connections: ConnectionStatus[];
   /** Whether the caller may register OAuth applications (operator action). */
-  is_admin: boolean;
 }
 
 export interface AuthorizeUrlResponse {
