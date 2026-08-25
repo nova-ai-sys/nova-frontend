@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { GoogleIcon, MicrosoftIcon, GitHubIcon } from '@/components/ui/BrandIcons';
-import { getFolderIcon } from '@/components/layout/FolderModal';
+import { getFolderIcon } from '@/lib/folderIcons';
 import { useI18n } from '@/lib/i18n';
 import { useConnections } from '@/hooks/useConnections';
 import { useRunningSessions } from '@/hooks/useRunningSessions';
@@ -86,6 +86,9 @@ interface SidebarProps {
 
 function FolderGlyph({ icon, className }: { icon: string; className?: string }) {
   const Icon = getFolderIcon(icon);
+  // The icon comes out of a module-level registry, so it is the same
+  // component instance on every render — nothing is created here.
+  // eslint-disable-next-line react-hooks/static-components
   return <Icon className={className} />;
 }
 

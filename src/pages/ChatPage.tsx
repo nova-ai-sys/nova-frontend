@@ -84,6 +84,8 @@ export function ChatPage() {
 
   useEffect(() => {
     if (sessionIdParam) {
+      // The URL is the external system this effect syncs from.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveSessionIdState((current) => (sessionIdParam !== current ? sessionIdParam : current));
       return;
     }
@@ -175,8 +177,13 @@ export function ChatPage() {
     loadHistory,
   } = useChat(activeSessionId);
 
+  // Latest chat history, read by the effect below without making it a
+  // dependency. Kept in sync from an effect: writing a ref during render is
+  // not allowed. This effect is declared first so it runs before the reader.
   const chatHistoryRef = useRef(chatHistory);
-  chatHistoryRef.current = chatHistory;
+  useEffect(() => {
+    chatHistoryRef.current = chatHistory;
+  }, [chatHistory]);
 
   useEffect(() => {
     const existsInHistory = chatHistoryRef.current.some((e) => e.id === activeSessionId);
@@ -192,6 +199,8 @@ export function ChatPage() {
   useEffect(() => {
     const savedHistory = loadPersistedHistory(storageKey);
     const savedFolders = loadPersistedFolders(storageKey);
+    // localStorage is an external store; this runs once on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (savedFolders.length > 0) setFolders(savedFolders);
 
     // The backend (data/sessions/*.json) is the source of truth for which
@@ -261,6 +270,8 @@ export function ChatPage() {
 
     const tempTitle = firstUserMsg.content.slice(0, 50) + (firstUserMsg.content.length > 50 ? '...' : '');
 
+    // The sidebar entry mirrors the conversation as it streams in.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setChatHistory((prev) => {
       const existing = prev.findIndex((e) => e.id === activeSessionId);
       if (existing >= 0) {

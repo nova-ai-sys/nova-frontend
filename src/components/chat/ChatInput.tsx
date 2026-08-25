@@ -30,9 +30,9 @@ export function ChatInput({ onSend, isLoading, onStop, externalFiles, onExternal
   }, [isLoading]);
 
   // Merge in externally dropped files
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (externalFiles && externalFiles.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFiles((prev) => {
         const existingNames = new Set(prev.map((f) => f.name));
         const newFiles = externalFiles.filter((f) => !existingNames.has(f.name));

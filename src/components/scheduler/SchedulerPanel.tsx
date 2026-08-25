@@ -83,8 +83,8 @@ function ExecutionLogs({ taskId }: { taskId: string }) {
   const [logs, setLogs] = useState<TaskExecution[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     getTaskExecutionLogs(taskId, 10)
       .then((r) => setLogs(r.executions))
