@@ -13,6 +13,10 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      # The release type lives in release-please-config.json. Passing
+      # `release-type` here instead would override it and make the action look
+      # for a Python project in a Node repository.
       - uses: googleapis/release-please-action@v4
         with:
-          release-type: python
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
