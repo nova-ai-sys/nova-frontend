@@ -47,30 +47,6 @@ sees one origin and CORS never comes up. To point at an API somewhere else, set
 | `npm run preview` | Serve the built app |
 | `npm run lint` | ESLint |
 
-## Layout
-
-| Folder | What lives there |
-|--------|-----------------|
-| `src/pages/` | ChatPage — the app. DocsPage — the documentation reader |
-| `src/components/chat/` | Messages, composer, live A2A diagram, token counter |
-| `src/components/connections/` | Google, Microsoft and GitHub accounts |
-| `src/components/intelligence/` | Memory and knowledge base |
-| `src/components/scheduler/` | Automations |
-| `src/components/system/` | Host CPU, RAM and GPU dock |
-| `src/hooks/` | useChat, useConnections, useDocs, useTheme |
-| `src/lib/` | API client, types, i18n, utilities |
-
-## Documentation
-
-`DocsPage` holds no documentation — it is a shell. The pages come from
-[nova-docs](https://github.com/nova-ai-sys/nova-docs) as a JSON bundle:
-
-- `public/docs-bundle.json` ships with the build and always works offline.
-- Set `VITE_DOCS_BUNDLE_URL` to the published bundle and the docs update
-  without updating NOVA.
-
-To edit documentation, edit `nova-docs`. Nothing here is the source of any page.
-
 ## The rest of NOVA
 
 | Repository | What it is |
@@ -88,5 +64,5 @@ MIT
 ---
 
 <div align="center">
-  Made with ❤️ by <a href="https://robyn.es">ROBYN</a>
+  <a href="https://robyn.es">ROBYN</a> © 2026 — built, not decorated
 </div>
